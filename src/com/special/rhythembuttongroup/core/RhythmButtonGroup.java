@@ -44,7 +44,7 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	/** 记录上一个选项卡Id */
 	private int preItemId;
 	/** 记录选项卡动画持续时间 */
-	private static long itemAnimationDur = 400;
+	private long itemAnimationDur = 400;
 	/** 标识是否为第一次移动 */
 	private static boolean isFirstMove = true;
 	/** 选项卡动画插入器 */
