@@ -1,4 +1,4 @@
-package com.special.rhythembuttongroup.core;
+package com.special.rhythembuttongroup.backup;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -8,13 +8,14 @@ import java.util.TimerTask;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
+import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewTreeObserver.OnGlobalLayoutListener;
 import android.view.WindowManager;
 import android.view.animation.Interpolator;
 import android.view.animation.OvershootInterpolator;
@@ -22,9 +23,10 @@ import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 
 import com.nineoldandroids.view.ViewPropertyAnimator;
+import com.special.rhythembuttongroup.core.RhythmAdapter;
 
 @SuppressLint("HandlerLeak")
-public class RhythmButtonGroup extends HorizontalScrollView {
+public class RhythmButtonGroup_backup2 extends HorizontalScrollView {
 
 //参数声明/**************************************************************************************/
 	//布局相关变量============================================================
@@ -59,21 +61,24 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	private Interpolator mInterpolator;
 	
 	//爬梯动画变量============================================================
+	/** 记录点击事件开始时间 */
+	private long touchStart;
 	/** 设置接替动画的触摸准备时长 */
-	private static long defaultTouchDur = 2500;
+	private static long defaultTouchDur = 250;
 	/** 被显示选项卡的起始位置编号 */
 	private int firstVisiblePosition;
 	/** 被显示选项卡的最后位置编号 */
 	private int lastVisiblePosition;
 	/** 当选项卡固定时，用于循环检测动画是否应该开启 */
 	private Timer timeLooper;
-	/** 更新界面用Handler */
+	/** 循环计时器 */
 	private Handler handler;
 	{
 		handler = new Handler(){
 			@Override
 			public void handleMessage(Message msg) {
-				startStairAnimation(); 
+				startStairAnimation(preItemId);
+				handler.sendEmptyMessageDelayed(0, 100);
 			}
 		};
 	}
@@ -81,23 +86,22 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	//状态记录器=============================================================
 	/** 记录当前点击状态 */
 	private State mState = State.UP;
-	private int itemId;
 	
 	private static enum State{
 		DOWN,MOVE,UP;
 	}
 //构造方法/**************************************************************************************/
-	public RhythmButtonGroup(Context context, AttributeSet attrs, int defStyle) {
+	public RhythmButtonGroup_backup2(Context context, AttributeSet attrs, int defStyle) {
 		super(context, attrs, defStyle);
 		init(context);
 	}
 
-	public RhythmButtonGroup(Context context, AttributeSet attrs) {
+	public RhythmButtonGroup_backup2(Context context, AttributeSet attrs) {
 		super(context, attrs);
 		init(context);
 	}
 
-	public RhythmButtonGroup(Context context) {
+	public RhythmButtonGroup_backup2(Context context) {
 		this(context, null);
 	}
 
@@ -140,7 +144,6 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 			mContainer.addView(mAdapter.getView(i, null, null));
 			System.out.println("setAdapter addView");
 		}
-
 	}
 
 	/**
@@ -158,6 +161,11 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	}
 	
 //重现触摸方法/************************************************************************************/
+//	@Override
+//	public boolean dispatchTouchEvent(MotionEvent ev) {
+//		return false;
+//	}
+	
 	@Override
 	public boolean onTouchEvent(MotionEvent ev) {
 		switch (ev.getAction()) {
@@ -187,13 +195,13 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	private void updateItemState(MotionEvent ev) {
 		int touchPointX = (int) ev.getX();
 		getVisibleItem();
-		itemId = (touchPointX + 1) / mItemWidth;
+		int itemId = (touchPointX + 1) / mItemWidth;
 		if(itemId < 0 ){  //健壮性判断条件
 			itemId = 0;
 		}else if(itemId > mFixedItem.size() - 1){
 			itemId = mFixedItem.size() - 1;
 		}
-		showItemAnimation();
+		showItemAnimation(itemId);
 	}
 
 	/**
@@ -212,18 +220,20 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	 * 开启对应点击位置选项卡关联动画效果
 	 * @param itemId 当前点击的选项卡Id
 	 */
-	private void showItemAnimation() {
+	private void showItemAnimation(int itemId) {
 		if(preItemId != itemId){
 			removeLooper(false);
-			updateStairState();
+			touchStart = SystemClock.currentThreadTimeMillis();
+			updateStairState(itemId);
 		}
+		
 		switch (mState) {
 		case DOWN:
-			onStartAnimation();
+			onStartAnimation(itemId);
 			break;
 
 		case MOVE:
-			onMoveAnimation();
+			onMoveAnimation(itemId);
 			break;
 		}
 		
@@ -234,7 +244,7 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	 * 被点击时的选项卡动画
 	 * @param itemId 被点击选项卡
 	 */
-	private void onStartAnimation() {
+	private void onStartAnimation(int itemId) {
 		View item = mFixedItem.get(itemId);
 		itemAutoMove(item, mPerTranslateY, 2.0f);
 		preItemId = itemId;
@@ -244,36 +254,24 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	 * 更新当前阶梯动画执行状况
 	 * @param itemId 选项卡Id
 	 */
-	private void updateStairState() {
+	private void updateStairState(final int itemId) {
 		timeLooper = new Timer();
-		timeLooper.schedule(new MyTimerTask(), 0, 200);
-		
-	}
-	
-	private class MyTimerTask extends TimerTask{
-		
-		private long touchStart;
-		private boolean isBound;
-
-		public MyTimerTask() {
-			super();
-			this.touchStart = System.currentTimeMillis();
+		timeLooper.schedule(new TimerTask() {
 			//判断当前按钮点击位置，是否位于当前显示的边界位置
-			this.isBound = (mFixedItem.size() - 1 == itemId) || (0 == itemId);
-		}
-		
-		@Override
-		public void run() {
-			if(isBound){
-				long duration = System.currentTimeMillis() - touchStart;
-				//判断是否需要开始发生阶梯动画
-				if( duration > defaultTouchDur ){
-					handler.sendEmptyMessage(0);
-					this.cancel();
-					timeLooper.cancel();
+			boolean isBound = (mFixedItem.size() - 1 == itemId) || (0 == itemId);
+			
+			@Override
+			public void run() {
+				if(isBound){
+					//判断是否需要开始发生阶梯动画
+					if((touchStart + defaultTouchDur < SystemClock.currentThreadTimeMillis())){
+						Log.e("time", isBound+ "       "+(touchStart + defaultTouchDur) + "     " + SystemClock.currentThreadTimeMillis());
+						startStairAnimation(itemId);
+					}
 				}
 			}
-		}
+		}, 100);
+		
 	}
 
 	/**
@@ -281,85 +279,45 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	 * @param itemId 选项卡Id
 	 * @param isLeft 位置变量，true：left； false：right
 	 */
-	private void startStairAnimation() {
-		isFirstMove = true;
-		boolean isLeft = (0 == itemId);
-		if(isLeft && firstVisiblePosition > 0){                 //To left
-			mFixedItem.remove(itemCountOnScreen - 1);
-			mFixedItem.add(0, mContainer.getChildAt(firstVisiblePosition - 1));
-			stairAnimation(-mItemWidth);
-		}else if(!isLeft && lastVisiblePosition < mAdapter.getCount() - 1){                           //To right
-			mFixedItem.remove(0);
-			mFixedItem.add(itemCountOnScreen - 1, mContainer.getChildAt(lastVisiblePosition + 1));
-			stairAnimation(mItemWidth);
-		}else{
-//			removeLooper(false);
-			return;
+	private void startStairAnimation(int itemId) {
+		if(0 == itemId){                 //To left
+			if(firstVisiblePosition > 0){
+				RhythmButtonGroup_backup2.this.smoothScrollBy(-mItemWidth, 0);
+				onMoveAnimation(itemId - 1);
+			}
+		}else{                           //To right
+			if(lastVisiblePosition < mAdapter.getCount()){
+				RhythmButtonGroup_backup2.this.smoothScrollBy(mItemWidth, 0);
+				onMoveAnimation(itemId + 1);
+			}
 		}
-		
-		preItemId = itemId - 1;
-
-		handler.sendEmptyMessageDelayed(0, itemAnimationDur + 100);
-		
-	}
-
-	private void stairAnimation(int dx) {
-			float tension = 4.0f;
-			if(isFirstMove){
-				tension = 2.0f;
-				isFirstMove = false;
-			}
-			firstVisiblePosition = getFirstVisiblePosition();
-			lastVisiblePosition = firstVisiblePosition + itemCountOnScreen - 1;
-			if(firstVisiblePosition > 0 && lastVisiblePosition < mAdapter.getCount() - 1){
-				mContainer.getChildAt(firstVisiblePosition -1).setTranslationY(mPerTranslateY);
-				mContainer.getChildAt(lastVisiblePosition + 1).setTranslationY(mPerTranslateY);
-			}
-			leftMoveAnimation(tension, 2);
-			rightMoveAnimation(tension, 2);
-			preItemId = itemId;
-			
-			RhythmButtonGroup.this.smoothScrollBy(dx, 0);
+		getVisibleItem();
+		//记录开始时间，准备阶梯动画
+		handler.sendEmptyMessage(0);
 	}
 
 	/**
 	 * 拖动时的选项卡动画
 	 * @param itemId 被操控选项卡
 	 */
-	private void onMoveAnimation() {
+	private void onMoveAnimation(int itemId) {
 		if(itemId != preItemId){
 			float tension = 4.0f;
 			if(isFirstMove){
 				tension = 2.0f;
 				isFirstMove = false;
 			}
-			leftMoveAnimation(tension, 1);
-			rightMoveAnimation(tension, 1);
+			//左侧动画
+			for (int i = itemId - 1; i >= 0; i--) {
+				View leftItem = mFixedItem.get(i);
+				itemAutoMove(leftItem, mPerTranslateY * (itemId - i + 1), tension);
+			}
+			//右侧（包括被点击选项卡）动画
+			for (int i = itemId; i < mFixedItem.size(); i++) {
+				View rightItem = mFixedItem.get(i);
+				itemAutoMove(rightItem, mPerTranslateY * (i - itemId + 1), tension);
+			}
 			preItemId = itemId;
-		}
-	}
-
-	/**
-	 * 左侧动画
-	 * @param tension 弹性系数
-	 * @param extra 额外缩减系数
-	 */
-	private void leftMoveAnimation(float tension, int extra) {
-		for (int i = itemId - 1; i >= 0; i--) {
-			View leftItem = mFixedItem.get(i);
-			itemAutoMove(leftItem, mPerTranslateY * (itemId - i + extra), tension);
-		}
-	}
-	
-	/**
-	 * 右侧（包括被点击选项卡）动画
-	 * @param tension 弹性系数
-	 * @param extra 额外缩减系数
-	 */
-	private void rightMoveAnimation(float tension, int extra) {
-		for (int i = itemId; i < mFixedItem.size(); i++) {
-			View rightItem = mFixedItem.get(i);
-			itemAutoMove(rightItem, mPerTranslateY * (i - itemId + extra), tension);
 		}
 	}
 	
@@ -370,11 +328,7 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 		isFirstMove = true;
 		for (int i = 0; i < mFixedItem.size(); i++) {
 			View item = mFixedItem.get(i);
-			if(itemId != i){
-				itemAutoMove(item, mMaxItemHeight, 2.0f);
-			}else{
-				continue;
-			}
+			itemAutoMove(item, mMaxItemHeight, 2.0f);
 		}
 	}
 
@@ -398,7 +352,7 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	public int getFirstVisiblePosition() {
 		if(itemCountOnScreen <= mAdapter.getCount()){
 			for (int i = 0; i < mAdapter.getCount(); i++) {
-				if(mContainer.getChildAt(i).getX() + mItemWidth / 2 < this.getScrollX()){
+				if(mContainer.getChildAt(i).getX() < 0){
 					continue;
 				}else{
 					return i;
@@ -430,15 +384,15 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	 * 移除阶梯动画循环
 	 */
 	private void removeLooper(boolean isDown) {
+		if(timeLooper != null){
+			timeLooper.cancel();
+		}
 		if(handler != null){
 			handler.removeCallbacksAndMessages(null);
 		}
-		if(timeLooper != null){
-			timeLooper.cancel();
-			timeLooper = null;
-		}
 		if(isDown){
 			preItemId = -1;
+			touchStart = 0;
 		}
 	}
 
