@@ -160,23 +160,8 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 //重现触摸方法/************************************************************************************/
 	@Override
 	public boolean onTouchEvent(MotionEvent ev) {
-		switch (ev.getAction()) {
-		case MotionEvent.ACTION_DOWN:
-			mState = State.DOWN;
-			updateItemState(ev);
-			break;
-			
-		case MotionEvent.ACTION_MOVE:
-			mState = State.MOVE;
-			updateItemState(ev);
-			break;
-			
-		case MotionEvent.ACTION_UP:
-			mState = State.UP;
-			removeLooper(true);
-			onFinishAnimation();
-			break;
-		}
+		updateItemState(ev);
+		showItemAnimation(ev);
 		return true;
 	}
 
@@ -193,7 +178,7 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 		}else if(itemId > mFixedItem.size() - 1){
 			itemId = mFixedItem.size() - 1;
 		}
-		showItemAnimation();
+		
 	}
 
 	/**
@@ -212,34 +197,36 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	 * 开启对应点击位置选项卡关联动画效果
 	 * @param itemId 当前点击的选项卡Id
 	 */
-	private void showItemAnimation() {
+	private void showItemAnimation(MotionEvent ev) {
+		//阶梯动画
 		if(preItemId != itemId){
 			removeLooper(false);
 			updateStairState();
 		}
-		switch (mState) {
-		case DOWN:
+		//节奏动画
+		switch (ev.getAction()) {
+		case MotionEvent.ACTION_DOWN:
+			mState = State.DOWN;
 			onStartAnimation();
+			onStayAnimation();
 			break;
-
-		case MOVE:
+			
+		case MotionEvent.ACTION_MOVE:
+			mState = State.MOVE;
 			onMoveAnimation();
+			break;
+			
+		case MotionEvent.ACTION_UP:
+			mState = State.UP;
+			removeLooper(true);
+			onFinishAnimation();
 			break;
 		}
 		
 	}
-
-	//节奏动画==============================================================
-	/**
-	 * 被点击时的选项卡动画
-	 * @param itemId 被点击选项卡
-	 */
-	private void onStartAnimation() {
-		View item = mFixedItem.get(itemId);
-		itemAutoMove(item, mPerTranslateY, 2.0f);
-		preItemId = itemId;
-	}
-
+	
+	
+	// 1-1 //阶梯动画==============================================================
 	/**
 	 * 更新当前阶梯动画执行状况
 	 * @param itemId 选项卡Id
@@ -250,11 +237,15 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 		
 	}
 	
+	/**
+	 * 自定义计时器Task
+	 * @author Windsander
+	 */
 	private class MyTimerTask extends TimerTask{
 		
 		private long touchStart;
 		private boolean isBound;
-
+		
 		public MyTimerTask() {
 			super();
 			this.touchStart = System.currentTimeMillis();
@@ -275,7 +266,7 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 			}
 		}
 	}
-
+	
 	/**
 	 * 开启阶梯动画
 	 * @param itemId 选项卡Id
@@ -293,35 +284,47 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 			mFixedItem.add(itemCountOnScreen - 1, mContainer.getChildAt(lastVisiblePosition + 1));
 			stairAnimation(mItemWidth);
 		}else{
-//			removeLooper(false);
+			removeLooper(false);
 			return;
 		}
 		
 		preItemId = itemId - 1;
-
+		
 		handler.sendEmptyMessageDelayed(0, itemAnimationDur + 100);
 		
 	}
-
+	
 	private void stairAnimation(int dx) {
-			float tension = 4.0f;
-			if(isFirstMove){
-				tension = 2.0f;
-				isFirstMove = false;
-			}
-			firstVisiblePosition = getFirstVisiblePosition();
-			lastVisiblePosition = firstVisiblePosition + itemCountOnScreen - 1;
-			if(firstVisiblePosition > 0 && lastVisiblePosition < mAdapter.getCount() - 1){
-				mContainer.getChildAt(firstVisiblePosition -1).setTranslationY(mPerTranslateY);
-				mContainer.getChildAt(lastVisiblePosition + 1).setTranslationY(mPerTranslateY);
-			}
-			leftMoveAnimation(tension, 2);
-			rightMoveAnimation(tension, 2);
-			preItemId = itemId;
-			
-			RhythmButtonGroup.this.smoothScrollBy(dx, 0);
+		float tension = 4.0f;
+		if(isFirstMove){
+			tension = 2.0f;
+			isFirstMove = false;
+		}
+		firstVisiblePosition = getFirstVisiblePosition();
+		lastVisiblePosition = firstVisiblePosition + itemCountOnScreen - 1;
+		if(firstVisiblePosition > 0 && lastVisiblePosition < mAdapter.getCount() - 1){
+			mContainer.getChildAt(firstVisiblePosition -1).setTranslationY(mPerTranslateY);
+			mContainer.getChildAt(lastVisiblePosition + 1).setTranslationY(mPerTranslateY);
+		}
+		leftMoveAnimation(tension, 2);
+		rightMoveAnimation(tension, 2);
+		preItemId = itemId;
+		
+		RhythmButtonGroup.this.smoothScrollBy(dx, 0);
 	}
 
+	// 2-1 //开启节奏动画============================================================
+	/**
+	 * 被点击时的选项卡动画
+	 * @param itemId 被点击选项卡
+	 */
+	private void onStartAnimation() {
+		View item = mFixedItem.get(itemId);
+		itemAutoMove(item, mPerTranslateY, 2.0f);
+		preItemId = itemId;
+	}
+
+	// 2-2 //滑动节奏动画============================================================
 	/**
 	 * 拖动时的选项卡动画
 	 * @param itemId 被操控选项卡
@@ -339,6 +342,44 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 		}
 	}
 
+	// 2-3 //维持节奏动画============================================================
+	/**
+	 * 维持选项卡当前位置的动画
+	 */
+	private void onStayAnimation() {
+		isFirstMove = true;
+		for (int i = 0; i < mFixedItem.size(); i++) {
+			View item = mFixedItem.get(i);
+			if(itemId != i){
+				itemAutoMove(item, mMaxItemHeight, 2.0f);
+			}else{
+				continue;
+			}
+		}
+	}
+
+	// 2-4 //结束滑动动画============================================================
+	/**
+	 * 选项卡的结束动画
+	 */
+	private void onFinishAnimation() {
+		int middlePositionId = itemCountOnScreen / 2;
+		if(itemId <= middlePositionId){
+			int dex = Math.min(middlePositionId - itemId, firstVisiblePosition);
+			this.smoothScrollBy(-mItemWidth * dex, 0);
+		}else if(itemId > middlePositionId){
+			int dex = Math.min(mAdapter.getCount() - lastVisiblePosition, itemId - middlePositionId);
+			this.smoothScrollBy(mItemWidth * dex, 0);
+		}
+	}
+	
+	@Override
+	public void computeScroll() {
+		// TODO Auto-generated method stub
+		super.computeScroll();
+	}
+	
+	// 3-1 //公用动画资源============================================================
 	/**
 	 * 左侧动画
 	 * @param tension 弹性系数
@@ -363,21 +404,6 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 		}
 	}
 	
-	/**
-	 * 选项卡的结束动画
-	 */
-	private void onFinishAnimation() {
-		isFirstMove = true;
-		for (int i = 0; i < mFixedItem.size(); i++) {
-			View item = mFixedItem.get(i);
-			if(itemId != i){
-				itemAutoMove(item, mMaxItemHeight, 2.0f);
-			}else{
-				continue;
-			}
-		}
-	}
-
 	private void itemAutoMove(View item, float dy, float tension) {
 		if(mInterpolator != null){
 			 ViewPropertyAnimator.animate(item)
