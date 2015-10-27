@@ -11,10 +11,8 @@ import android.os.Handler;
 import android.os.Message;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewTreeObserver.OnGlobalLayoutListener;
 import android.view.WindowManager;
 import android.view.animation.Interpolator;
 import android.view.animation.OvershootInterpolator;
@@ -219,6 +217,7 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 		case MotionEvent.ACTION_UP:
 			mState = State.UP;
 			removeLooper(true);
+			onStayAnimation();
 			onFinishAnimation();
 			break;
 		}
@@ -360,7 +359,7 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 
 	// 2-4 //结束滑动动画============================================================
 	/**
-	 * 选项卡的结束动画
+	 * 选项卡的结束动画 TODO
 	 */
 	private void onFinishAnimation() {
 		int middlePositionId = itemCountOnScreen / 2;
@@ -371,12 +370,6 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 			int dex = Math.min(mAdapter.getCount() - lastVisiblePosition, itemId - middlePositionId);
 			this.smoothScrollBy(mItemWidth * dex, 0);
 		}
-	}
-	
-	@Override
-	public void computeScroll() {
-		// TODO Auto-generated method stub
-		super.computeScroll();
 	}
 	
 	// 3-1 //公用动画资源============================================================
