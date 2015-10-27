@@ -81,7 +81,7 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	private State mState = State.UP;
 	private int itemId;
 	
-	private static enum State{
+	public static enum State{
 		DOWN,MOVE,UP,STAIRING;
 	}
 //构造方法/**************************************************************************************/
