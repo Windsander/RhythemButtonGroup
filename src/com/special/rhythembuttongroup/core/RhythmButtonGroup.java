@@ -82,7 +82,7 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	private int itemId;
 	
 	private static enum State{
-		DOWN,MOVE,UP;
+		DOWN,MOVE,UP,STAIRING;
 	}
 //构造方法/**************************************************************************************/
 	public RhythmButtonGroup(Context context, AttributeSet attrs, int defStyle) {
@@ -205,17 +205,20 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 		switch (ev.getAction()) {
 		case MotionEvent.ACTION_DOWN:
 			mState = State.DOWN;
+			mGroupStateListener.onStateChanged(mState);
 			onStartAnimation();
 			onStayAnimation();
 			break;
 			
 		case MotionEvent.ACTION_MOVE:
 			mState = State.MOVE;
+			mGroupStateListener.onStateChanged(mState);
 			onMoveAnimation();
 			break;
 			
 		case MotionEvent.ACTION_UP:
 			mState = State.UP;
+			mGroupStateListener.onStateChanged(mState);
 			removeLooper(true);
 			onStayAnimation();
 			onFinishAnimation();
@@ -259,6 +262,8 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 				//判断是否需要开始发生阶梯动画
 				if( duration > defaultTouchDur ){
 					handler.sendEmptyMessage(0);
+					mState = State.STAIRING;
+					mGroupStateListener.onStateChanged(mState);
 					this.cancel();
 					timeLooper.cancel();
 				}
@@ -302,8 +307,11 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 		firstVisiblePosition = getFirstVisiblePosition();
 		lastVisiblePosition = firstVisiblePosition + itemCountOnScreen - 1;
 		if(firstVisiblePosition > 0 && lastVisiblePosition < mAdapter.getCount() - 1){
-			mContainer.getChildAt(firstVisiblePosition -1).setTranslationY(mPerTranslateY);
-			mContainer.getChildAt(lastVisiblePosition + 1).setTranslationY(mPerTranslateY);
+			if(dx < 0){
+				mContainer.getChildAt(firstVisiblePosition -1).setTranslationY(mPerTranslateY);
+			}else{
+				mContainer.getChildAt(lastVisiblePosition + 1).setTranslationY(mPerTranslateY);
+			}
 		}
 		leftMoveAnimation(tension, 2);
 		rightMoveAnimation(tension, 2);
@@ -370,8 +378,19 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 			int dex = Math.min(mAdapter.getCount() - lastVisiblePosition, itemId - middlePositionId);
 			this.smoothScrollBy(mItemWidth * dex, 0);
 		}
+		resetButtonGroup();
 	}
 	
+	private void resetButtonGroup() {
+		for (int i = 0; i < mAdapter.getCount(); i++) {
+			if(firstVisiblePosition + itemId != i){
+				mContainer.getChildAt(i).setTranslationY(mMaxItemHeight);
+			}else{
+				continue;
+			}
+		}
+	}
+
 	// 3-1 //公用动画资源============================================================
 	/**
 	 * 左侧动画
@@ -462,6 +481,23 @@ public class RhythmButtonGroup extends HorizontalScrollView {
 	}
 
 //回调接口/**************************************************************************************/
+	/** 当前RhythmButtonGroup状态监听 */
+	private OnGroupStateListener mGroupStateListener;
 	
+	/**
+	 * 对外暴露的状态监听接口
+	 * @author Windsander
+	 */
+	public interface OnGroupStateListener{
+		void onStateChanged(State state);
+	}
+	
+	/**
+	 * 设置RhythmButtonGroup的状态监听，便于在运行过程中执行相应操作
+	 * @param mGroupStateListener 状态监听
+	 */
+	public void setOnGroupStateListener(OnGroupStateListener mGroupStateListener){
+		this.mGroupStateListener = mGroupStateListener;
+	}
 
 }
